@@ -1,0 +1,176 @@
+---
+title: "Parametrizations in<br>Nominal Response Model"
+subtitle: "with implementations in `ShinyItemAnalysis`"
+author: "Jan Netík"
+institute: "Computational Psychometrics Group, ICS CAS"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    css: xaringan-themer.css
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+```
+
+```{r xaringan-themer, include=FALSE, warning=FALSE}
+library(xaringanthemer)
+style_mono_accent(
+  base_color = "#0062CC",
+  header_font_google = google_font("Raleway", "500"),
+  text_font_google   = google_font("Fira Sans"),
+  code_font_google   = google_font("Fira Code"), header_h1_font_size = "2rem",
+  extra_css = list(
+    ".title-slide .remark-inline-code" = list( "color" = "white"),
+    ".title-slide h1" = list("font-size" = "2.75rem", "font-weight" = "800"),
+    ".title-slide h2" = list("font-size" = "2.33rem", "font-weight" = "normal"),
+    ".title-slide h3" = list("font-size" = "1.5rem", "font-weight" = "normal")
+  )
+)
+```
+
+
+# Nominal response model
+
+- Bock's (1972)
+
+- item $i$ with apriori unordered set of $K_i$ response categories $k = 0, 1, ..., k-1$
+
+- probability of endorsing category $k$ is given by
+
+$$\pi_{pik} = \mathrm{P}(Y_{pi} = k|\theta_p; a, c) = \frac{e^{z_{ik}}}{\sum_{l=0}^{K_i-1} e^{z_{il}}}$$
+where $z_{ik} = a_{ik}\theta + c _{ik}$ and parameters have following constrains:
+
+- $\sum_{k=0}^{K_i}a_k = 0$
+
+- $\sum_{k=0}^{K_i}c_k = 0$
+
+ 
+---
+
+# Thissen et al. (2010) multidimensional generalization
+
+- introducing so-called *overall slope parameter* $a^*$ and *dimension-specific* $a^s$ parameters
+
+- item response function for unidimensional model:
+
+
+$$\pi_{pik} = \mathrm{P}(Y_{pi} = k|\theta_p) = \frac{e^{ a^*_i a_{ik}^s \theta_p + d_{ik} }}{\sum_{l=0}^{K_i} e^{ a^*_i a_{il}^s \theta_p + d_{il}}}$$
+
+with constrains:
+
+- $a_{i0}^s = 0$
+
+- $a_{iK}^s = K -1$
+
+- $d_{i0} = 0$
+     
+
+---
+
+# Baseline-category Logit Intercept-Slope (BLIS) model
+
+- baseline-category logits:
+$$\mathrm{log}\bigg(\frac{\pi_{pik}}{\pi_{pi0}}\bigg) = {\beta_0}_{ik} + {\beta_1}_{ik}\theta_p$$
+where $\pi_{pi0}$ denotes the probability of endorsing the *baseline category* and item response function is
+
+
+$$\pi_{pik} = \mathrm{P}(Y_{pi} = k|\theta_p;{\beta_0}_{ik}, {\beta_1}_{ik}  ) = \frac{e^{ {\beta_0}_{ik} +  {\beta_1}_{ik}\theta_p  }}{\sum_{l=0}^{K_i-1} e^{ {\beta_0}_{il} +  {\beta_1}_{il}\theta_p }}$$
+
+with **correct-response driven** constrains ${\beta_0}_{i0} = 0$ and ${\beta_1}_{i0} = 0$, freely estimating the rest
+
+---
+
+
+# Baseline-category Logit IRT (BLIRT) model
+
+- IRT parametrization of BLIS
+
+$$\pi_{pik} = \mathrm{P}(Y_{pi} = k|\theta_p) = \frac{e^{ a_{ik}( \theta_p - b_{ik} ) }} {\sum_{l=0}^{K_i-1} e^{ a_{il}( \theta_p - b_{il} ) }}$$
+
+with constrains $a_{i0} = 0$ and $b_{i0} = 0$
+
+
+- coefficients are obtained by reparametrizing BLIS (with intercept and slope) by utilizing 
+$$b =\frac{{\beta_0}_{ik}}{{\beta_1}_{ik}}$$
+- the resulting "threshold" $b$s  parameters are now interpretable; "discrimination" parameters $a$s remains the same: ${\beta_1}_{ik} = a_{ik}$
+
+---
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE,out.width='100%', fig.height=8}
+library(ggplot2)
+library(tidyr)
+library(plotly)
+
+# setting parameters - the baseline-category parameter is constrained to 0
+a <- c(0, -1.5, -1, -.5, -.5)
+b <- c(0, -3, -2, -1.5, -.5)
+
+# get `b`s except that of the baseline-category
+# (we will use them to indicate the intercepts of distractors with the baseline)
+vlines <- b[b != 0]
+
+# create ability sequence
+thetas <- seq(-4, 4, by = .01)
+
+# get linear predictor
+lin_pred <- sapply(seq_along(a), function(i) {
+  a[i] * (thetas - b[i])
+})
+
+# exponentiate
+exponentiated <- exp(lin_pred)
+
+# get category probabilities
+cat_probs <- exponentiated / (rowSums(exponentiated))
+
+# set names
+colnames(cat_probs) <- c("Correct", paste0("Distractor_", 1:4))
+
+# make data.frame with thetas and categories probabilities
+probs <- data.frame(thetas, cat_probs)
+
+probs_long <- pivot_longer(probs, -thetas, names_to = "Response")
+
+# plot category probabilities
+p <- ggplot(probs_long, aes(x = thetas, y = value, col = Response)) +
+  geom_line(size = 1) +
+  geom_vline(xintercept = vlines, col = "grey", linetype = "dashed") +
+  labs(x = "Ability", y = "Category probability") +
+  coord_cartesian(xlim = range(thetas), ylim = c(0, 1), expand = FALSE) +
+  theme_minimal() +
+  theme(legend.position = c(1, .5), legend.justification = c(1, .5))
+
+p%>% ggplotly()%>% layout(showlegend = FALSE)
+```
+
+
+---
+
+
+# R Code
+
+```{r comment='#'}
+# a boring regression
+fit = lm(dist ~ 1 + speed, data = cars)
+coef(summary(fit))
+dojutsu = c('地爆天星', '天照', '加具土命', '神威', '須佐能乎', '無限月読')
+grep('天', dojutsu, value = TRUE)
+```
+
+---
+
+# R Plots
+
+```{r cars, fig.height=4, dev='svg'}
+par(mar = c(4, 4, 1, .1))
+plot(cars, pch = 19, col = 'darkgray', las = 1)
+abline(fit, lwd = 2)
+```
